@@ -17,8 +17,8 @@ Jeweler::Tasks.new do |gem|
   gem.name = "layered_template"
   gem.homepage = "http://github.com/mathfur/layered_template"
   gem.license = "MIT"
-  gem.summary = %Q{TODO: one-line summary of your gem}
-  gem.description = %Q{TODO: longer description of your gem}
+  gem.summary = %Q{(Durgin creation) write by DSL, and generate files.}
+  gem.description = %Q{During creation.}
   gem.email = "mathfuru@gmail.com"
   gem.authors = ["mathfuru"]
   # dependencies defined in Gemfile
