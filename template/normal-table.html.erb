@@ -1,0 +1,26 @@
+<%= before %>
+<table>
+  <tr>
+    <%- t_attrs.each do |name, args, opts| -%>
+      <%- case name -%>
+
+      <%- when "columns" -%>
+        <%- args.each do |arg| -%>
+          <th><%= opts[:header] || t(name) %></th>
+        <%- end -%>
+        <%- objs.each do |obj| -%>
+          <%- args.each do |arg| -%>
+            <td><%= render(arg) %></th>
+          <%- end -%>
+        <%- end -%>
+
+      <%- when "paginate" -%>
+        <%= "pagenate_elem" %>
+
+      <%- else -%>
+
+      <%- end -%>
+    <%- end -%>
+  </tr>
+</table>
+<%= after %>
