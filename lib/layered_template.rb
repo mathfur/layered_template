@@ -1,7 +1,12 @@
+# -*- encoding: utf-8 -*-
+
+require "lib/layered_template/config"
+
 require 'rubygems'
 require "active_support"
 require 'active_support/core_ext/array'
 require 'erb'
+
 
 #class DeployTarget
 #  # name
@@ -21,15 +26,15 @@ require 'erb'
 #class TemplateAttr < Attr
 #  # super
 #  # [DeployTarget]
-#  def initialize(name, deploy_contents, hash)
+#  def initialize(name, tables, hash)
 #    super(name, hash)
-#    @deploy_contents = deploy_contents
+#    @tables = tables
 #  end
 #end
 
 class LayeredTemplate
   def initialize(&block)
-    @deploy_contents = []
+    @tables = []
     self.instance_eval(&block) if block_given?
   end
 
@@ -40,15 +45,15 @@ class LayeredTemplate
   end
 
   def table(name, &block)
-    @deploy_contents << DeployContent.new(name, &block)
+    @tables << Table.new(name, &block)
   end
 
   def output(dir)
-    @deploy_contents.map{|dc| dc.output(dir)}.join
+    @tables.map{|dc| dc.output(dir)}.join
   end
 end
 
-class DeployContent
+class Table
   # [Deploy]
   # DbAttrBlock
   attr_reader :name
@@ -100,20 +105,28 @@ class Template
 
   def initialize(name, template_name, opt={}, &block)
     @name = name
-    @template_name = template_name
     @elems = []
     @opt = {}
+    template_fname = "#{Config.tpl_dir}/#{template_name}"
+
+    if File.exist?(template_fname)
+      @template_fname = template_fname
+    else
+      unless ["", ".html", ".js", ".css"].any? { |ext| (path = "#{template_fname}#{ext}.erb") && File.exist?(path) && (@template_fname = path) }
+        raise "The template file '#{template_fname}' does not exist."
+      end
+    end
     self.instance_eval(&block)
   end
 
   def method_missing(name, *args)
     opts = args.extract_options!
-    @elems << [name, args.map{|a| Value.new(a)}, opts]
+    @elems << [name.to_sym, args.map{|a| Value.new(a)}, opts]
   end
 
   def output(dir)
     sandbox = Sandbox.new(@elems, db_attr_block.elems)
-    erb_result = ERB.new(File.read(@template_name)).result(sandbox.binding)
+    erb_result = ERB.new(File.read(@template_fname), nil, '-').result(sandbox.instance_eval("binding"))
     return erb_result unless @opt[:fname]
     OutputManager.push("#{dir}/#{fname}", @opt[:loc_id], erb_result)
     nil
@@ -140,12 +153,8 @@ class Sandbox
     end
   end
 
-  def binding
-    binding
-  end
-
   # nameという名前のテーブルを描画する
-  def t(name)
+  def tbl(name)
     Table.find(name).output
   end
 
@@ -156,10 +165,14 @@ class Sandbox
 
   # argの型に応じてテキストに変換する
   def render(arg)
-    case arg
-    when Table
-      t(arg)
-    when Source
+    case arg.type
+    when :table_or_attr
+      if (attr = db_attrs.find{|name, args, hash| name == arg.v})
+        attr.last[:val] || ""
+      else
+        tbl(arg)
+      end
+    when :source
       filter arg
     else
       raise ArgumentError
@@ -172,6 +185,14 @@ class Sandbox
     # TODO: 以下はどうなる?
     # * 「enum_wrapで囲まれた要素の前後にstrを挿入」ができない
     block.call
+  end
+
+  def before
+    # TODO: あとで実装
+  end
+
+  def after
+    # TODO: あとで実装
   end
 end
 
@@ -187,13 +208,22 @@ class DbAttrBlock
 
   def method_missing(name, *args)
     opts = args.extract_options!
-    @elems << [name, args, Hash[*(@labels.zip(args)).flatten]]
+    @elems << [name, args, Hash[*(@labels.map(&:to_sym).zip(args)).flatten]]
   end
 end
 
 class Value
+  attr_reader :v, :type
   def initialize(v)
     @v = v
+    @type = case v
+    when String
+      :source
+    when Symbol
+      :table_or_attr
+    else
+      :other
+    end
   end
 end
 
@@ -225,7 +255,7 @@ ltpl_name = "#{File.dirname(__FILE__)}/../spec/sample/sample1.ltpl"
 raise "Template file #{ltpl_name} is not exist." unless File.exist?(ltpl_name)
 
 BASE_DIR = File.dirname(__FILE__) + "/.."
-LayeredTemplate.load(ltpl_name).output(BASE_DIR)
+puts LayeredTemplate.load(ltpl_name).output(BASE_DIR)
 
 __END__
 # まずデータ構造を決定 -> 付随する形でDSL定義

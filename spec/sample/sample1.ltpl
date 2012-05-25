@@ -1,0 +1,10 @@
+table :foo do
+  template 'normal-table' do
+    columns :name, :price
+  end
+
+  attrs %w{val} do
+    name "<%= item.name %>"
+    price "<%= item.price %>"
+  end
+end

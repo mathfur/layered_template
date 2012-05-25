@@ -3,18 +3,21 @@
   <tr>
     <%- t_attrs.each do |name, args, opts| -%>
       <%- case name -%>
-
-      <%- when "columns" -%>
+      <%- when :columns -%>
+        <tr>
         <%- args.each do |arg| -%>
-          <th><%= opts[:header] || t(name) %></th>
+          <th><%%= <%= opts[:header] || "t('#{arg.v}')" %> %></th>
         <%- end -%>
-        <%- objs.each do |obj| -%>
+        </tr>
+        <%%- objs.each do |obj| -%>
+          <tr>
           <%- args.each do |arg| -%>
-            <td><%= render(arg) %></th>
+            <td><%= render(arg) %></td>
           <%- end -%>
-        <%- end -%>
+          </tr>
+        <%%- end -%>
 
-      <%- when "paginate" -%>
+      <%- when :paginate -%>
         <%= "pagenate_elem" %>
 
       <%- else -%>
