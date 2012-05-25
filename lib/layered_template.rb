@@ -1,6 +1,7 @@
 # -*- encoding: utf-8 -*-
 
 require "lib/layered_template/config"
+require "lib/layered_template/helper"
 
 require 'rubygems'
 require "active_support"
@@ -107,15 +108,7 @@ class Template
     @name = name
     @elems = []
     @opt = {}
-    template_fname = "#{Config.tpl_dir}/#{template_name}"
-
-    if File.exist?(template_fname)
-      @template_fname = template_fname
-    else
-      unless ["", ".html", ".js", ".css"].any? { |ext| (path = "#{template_fname}#{ext}.erb") && File.exist?(path) && (@template_fname = path) }
-        raise "The template file '#{template_fname}' does not exist."
-      end
-    end
+    @template_fname = Helper.find_template(template_name) or raise "The template file does not found."
     self.instance_eval(&block)
   end
 
