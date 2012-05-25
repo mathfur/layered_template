@@ -7,7 +7,9 @@ require 'rubygems'
 require "active_support"
 require 'active_support/core_ext/array'
 require 'erb'
+require "getoptlong"
 
+BASE_DIR = File.dirname(__FILE__) + "/.."
 
 #class DeployTarget
 #  # name
@@ -244,8 +246,26 @@ EOS
   end
 end
 
-ltpl_name = "#{File.dirname(__FILE__)}/../spec/sample/sample1.ltpl"
+
+parser = GetoptLong.new
+
+parser.set_options(
+  ['--template-path', '-t', GetoptLong::OPTIONAL_ARGUMENT],
+  ['--verbose', GetoptLong::NO_ARGUMENT]
+)
+
+parser.each_option do |name, arg|
+  case name
+  when '--template-path', '-t'
+    Helper.prepend_template_search_path(arg.split(/,/))
+  end
+end
+
+ARGV = ["spec/sample/sample1.ltpl"]
+
+raise "Missing ltpl argument" if ARGV.length != 1
+
+ltpl_name = "#{Dir.pwd}/#{ARGV.shift}"
 raise "Template file #{ltpl_name} is not exist." unless File.exist?(ltpl_name)
 
-BASE_DIR = File.dirname(__FILE__) + "/.."
 puts LayeredTemplate.load(ltpl_name).output(BASE_DIR)
