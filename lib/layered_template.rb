@@ -11,30 +11,6 @@ require "getoptlong"
 
 BASE_DIR = File.dirname(__FILE__) + "/.."
 
-#class DeployTarget
-#  # name
-#  # (path, location_property) :: Maybe String
-#end
-#
-#class Attr
-#  # 名前 :: String
-#  # {String => Object}
-#
-#  def initialize(name, hash = {})
-#    @name = name
-#    @hash = hash
-#  end
-#end
-#
-#class TemplateAttr < Attr
-#  # super
-#  # [DeployTarget]
-#  def initialize(name, tables, hash)
-#    super(name, hash)
-#    @tables = tables
-#  end
-#end
-
 class LayeredTemplate
   def initialize(&block)
     @tables = []
@@ -57,8 +33,6 @@ class LayeredTemplate
 end
 
 class Table
-  # [Deploy]
-  # DbAttrBlock
   attr_reader :name
 
   def initialize(name, &block)
@@ -245,7 +219,6 @@ EOS
     end
   end
 end
-
 
 parser = GetoptLong.new
 
