@@ -24,10 +24,14 @@ class LayeredTemplate
   end
 
   def table(name, &block)
-    @tables << Table.new(name, &block)
+    @tables << Table.new(self, name, &block)
   end
 
-  def output(dir)
+  def find_table(name)
+    @tables.find{|t| t.name == name} or raise "The table '#{name}' is not found."
+  end
+
+  def output(dir=nil)
     @tables.map{|dc| dc.output(dir)}.join
   end
 end
@@ -35,11 +39,12 @@ end
 class Table
   attr_reader :name
 
-  def initialize(name, &block)
+  def initialize(parent, name, &block)
     @name = name
     @templates = []
     @tpl_opt = {}
-    @@all_tables = [self]
+    @tables = []
+    @parent = parent
     self.instance_eval(&block)
   end
 
@@ -54,7 +59,7 @@ class Table
   end
 
   def template(template_name, &block)
-    @templates << Template.new(@name, template_name, @tpl_opt, &block)
+    @templates << Template.new(self, @name, template_name, @tpl_opt, &block)
     @tpl_opt = {}
   end
   alias_method :deploy, :template
@@ -64,12 +69,16 @@ class Table
     @templates.map{|t| t.db_attr_block = db_attr_block}
   end
 
-  def output(dir)
+  def output(dir=nil)
     @templates.map{|t| t.output(dir)}.join
   end
 
-  def self.find(name)
-    @all_tables.find{|t| t.name == name}
+  def table(name, &block)
+    @tables << Table.new(self, name, &block)
+  end
+
+  def find_table(name)
+    @tables.find{|table| table.name == name} || @parent.find_table(name)
   end
 end
 
@@ -80,7 +89,8 @@ class Template
 
   attr_accessor :db_attr_block
 
-  def initialize(name, template_name, opt={}, &block)
+  def initialize(table, name, template_name, opt={}, &block)
+    @table = table
     @name = name
     @elems = []
     @opt = {}
@@ -93,20 +103,24 @@ class Template
     @elems << [name.to_sym, args.map{|a| Value.new(a)}, opts]
   end
 
-  def output(dir)
-    sandbox = Sandbox.new(@elems, db_attr_block.elems)
+  def output(dir=nil)
+    sandbox = Sandbox.new(@table, @elems, db_attr_block)
     erb_result = ERB.new(File.read(@template_fname), nil, '-').result(sandbox.instance_eval("binding"))
-    return erb_result unless @opt[:fname]
-    OutputManager.push("#{dir}/#{fname}", @opt[:loc_id], erb_result)
-    nil
+    if @opt[:fname] && dir
+      OutputManager.push("#{dir}/#{fname}", @opt[:loc_id], erb_result)
+      nil
+    else
+      erb_result
+    end
   end
 end
 
 class Sandbox
   attr_reader :t_attrs, :db_attrs
-  def initialize(template_attrs, db_attrs, opt={})
+  def initialize(table, template_attrs, db_attrs, opt={})
+    @table = table
     @t_attrs = template_attrs
-    @db_attrs = db_attrs
+    @db_attrs = db_attrs || []
     @enum = (opt[:enum_in] && opt[:enum_out])
     @enum_in = opt[:enum_in] || "objs"
     @enum_out = opt[:enum_out] || "obj"
@@ -115,7 +129,9 @@ class Sandbox
       template_attrs.each do |name, args, opts|
         unless respond_to?(name)
           define_method name do
-            attr
+            t_attrs.select{|name_, _, _| name == name.to_sym}.each do |name, args, hash|
+              args.each{|arg| render(arg)}
+            end
           end
         end
       end
@@ -124,7 +140,7 @@ class Sandbox
 
   # nameという名前のテーブルを描画する
   def tbl(name)
-    Table.find(name).output
+    @table.find_table(name).output
   end
 
   # 頭文字r>などによって加工する
@@ -139,12 +155,12 @@ class Sandbox
       if (attr = db_attrs.find{|name, args, hash| name == arg.v})
         attr.last[:val] || ""
       else
-        tbl(arg)
+        tbl(arg.v)
       end
     when :source
-      filter arg
+      filter arg.v
     else
-      raise ArgumentError
+      raise ArgumentError, "#{arg.inspect} must be :table_or_attr or :source"
     end
   end
 
@@ -234,7 +250,7 @@ parser.each_option do |name, arg|
   end
 end
 
-ARGV = ["spec/sample/sample1.ltpl"]
+ARGV = ["spec/sample/sample2.ltpl"]
 
 raise "Missing ltpl argument" if ARGV.length != 1
 
