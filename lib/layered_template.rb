@@ -1,7 +1,10 @@
 # -*- encoding: utf-8 -*-
 
-require "lib/layered_template/config"
-require "lib/layered_template/helper"
+$:.unshift File.dirname(__FILE__)
+
+require "./lib/layered_template/config"
+require "./lib/layered_template/helper"
+require "./lib/layered_template/table_definable"
 
 require 'rubygems'
 require "active_support"
@@ -12,39 +15,51 @@ require "getoptlong"
 BASE_DIR = File.dirname(__FILE__) + "/.."
 
 class LayeredTemplate
-  def initialize(&block)
-    @tables = []
-    self.instance_eval(&block) if block_given?
+  def initialize(src=nil, &block)
+    c = LayeredTemplateForRunningDSL.new
+    block_given? ?  c.instance_eval(&block) : c.instance_eval(src)
+    @tables = c.tables
   end
 
-  def self.load(fname)
-    instance = self.new
-    instance.instance_eval(File.read(fname))
-    instance
-  end
-
-  def table(name, &block)
-    @tables << Table.new(self, name, &block)
-  end
-
-  def find_table(name)
-    @tables.find{|t| t.name == name} or raise "The table '#{name}' is not found."
+  def self.load(tpl_fname)
+    self.new(File.read(tpl_fname))
   end
 
   def output(dir=nil)
     @tables.map{|dc| dc.output(dir)}.join
   end
+
+#  def inspect
+#    <<EOS
+##<LayeredTemplate:0x1016b67f8
+#  @tables=[
+#    #{@tables.map(&:inspect).join("\n")}
+#  ]
+#>
+#EOS
+#  end
+end
+
+class LayeredTemplateForRunningDSL
+  include TableDefinable
+  attr_reader :tables
+
+  def initialize
+    @tables = []
+  end
 end
 
 class Table
-  attr_reader :name
+  include TableDefinable
+
+  attr_reader :name, :d_attr_block, :d_attrs
 
   def initialize(parent, name, &block)
     @name = name
     @templates = []
     @tpl_opt = {}
-    @tables = []
     @parent = parent
+    @d_attrs = []
     self.instance_eval(&block)
   end
 
@@ -59,52 +74,53 @@ class Table
   end
 
   def template(template_name, &block)
-    @templates << Template.new(self, @name, template_name, @tpl_opt, &block)
+    @templates << Template.new(self, template_name, @tpl_opt, &block)
     @tpl_opt = {}
   end
   alias_method :deploy, :template
 
   def attrs(labels, &block)
-    db_attr_block = DbAttrBlock.new(labels, &block)
-    @templates.map{|t| t.db_attr_block = db_attr_block}
+    @d_attr_block = DbAttrBlock.new(labels, &block)
+    @d_attrs = @d_attr_block.elems
+  end
+
+  def d_item(name)
+    item = self.d_attrs.find{|name_, _, _| name_ == name.to_sym} || []
+    [item[1], item[2]]
   end
 
   def output(dir=nil)
     @templates.map{|t| t.output(dir)}.join
   end
 
-  def table(name, &block)
-    @tables << Table.new(self, name, &block)
-  end
-
-  def find_table(name)
-    @tables.find{|table| table.name == name} || @parent.find_table(name)
-  end
+#  def inspect
+#<<EOS
+##<Table:
+#  @templates:
+#    elems
+#    #{@tamplates.map(&:inspect).join("\n")}
+#  attrs:
+#    #{}
+#  @tables:
+#    #{}
+#EOS
+#  end
 end
 
 class Template
-  # Name :: String
-  # DeployTarget
-  # TemplateAttrBlock
+  attr_reader :table, :t_attrs
 
-  attr_accessor :db_attr_block
-
-  def initialize(table, name, template_name, opt={}, &block)
+  def initialize(table, template_name, opt={}, &block)
     @table = table
-    @name = name
     @elems = []
     @opt = {}
     @template_fname = Helper.find_template(template_name) or raise "The template file does not found."
-    self.instance_eval(&block)
-  end
-
-  def method_missing(name, *args)
-    opts = args.extract_options!
-    @elems << [name.to_sym, args.map{|a| Value.new(a)}, opts]
+    (t = TemplateForRunningDSL.new).instance_eval(&block)
+    @t_attrs = t.elems
   end
 
   def output(dir=nil)
-    sandbox = Sandbox.new(@table, @elems, db_attr_block)
+    sandbox = Sandbox.new(self)
     erb_result = ERB.new(File.read(@template_fname), nil, '-').result(sandbox.instance_eval("binding"))
     if @opt[:fname] && dir
       OutputManager.push("#{dir}/#{fname}", @opt[:loc_id], erb_result)
@@ -113,55 +129,74 @@ class Template
       erb_result
     end
   end
+
+  def t_item(name)
+    item = self.t_attrs.find{|name_, _, _| name_ == name.to_sym} || []
+    [item[1], item[2]]
+  end
+end
+
+class TemplateForRunningDSL
+  attr_reader :elems
+
+  def initialize
+    @elems = []
+  end
+
+  def method_missing(name, *args)
+    opts = args.extract_options!
+    @elems << [name.to_sym, args.map{|a| Value.new(a)}, opts]
+  end
 end
 
 class Sandbox
-  attr_reader :t_attrs, :db_attrs
-  def initialize(table, template_attrs, db_attrs, opt={})
-    @table = table
-    @t_attrs = template_attrs
-    @db_attrs = db_attrs || []
+  def initialize(template, opt={})
+    @template = template
     @enum = (opt[:enum_in] && opt[:enum_out])
     @enum_in = opt[:enum_in] || "objs"
     @enum_out = opt[:enum_out] || "obj"
 
     self.class.class_eval do
-      template_attrs.each do |name, args, opts|
+      # Names defined in template block can be called in erb.
+      template.t_attrs.each do |name, args, opts|
         unless respond_to?(name)
           define_method name do
-            t_attrs.select{|name_, _, _| name == name.to_sym}.each do |name, args, hash|
-              args.each{|arg| render(arg)}
-            end
+            template.t_item(name).first.map{|item| render(item)}.join("\n")
           end
         end
       end
     end
   end
 
+  def t_attrs
+    @template.t_attrs
+  end
+
+  # itemの型に応じてテキストに変換する
+  def render(item, opts={})
+    case item.type
+    when :table_or_attr
+      attr_, opts = @template.table.d_item(item.v)
+      if attr_
+        opts[:val] || ""
+      else
+        tbl(item.v)
+      end
+    when :source
+      filter item.v
+    else
+      raise ArgumentError, "#{item.inspect} must be :table_or_attr or :source"
+    end
+  end
+
   # nameという名前のテーブルを描画する
   def tbl(name)
-    @table.find_table(name).output
+    @template.table.find_table(name).output
   end
 
   # 頭文字r>などによって加工する
   def filter(str)
     str
-  end
-
-  # argの型に応じてテキストに変換する
-  def render(arg)
-    case arg.type
-    when :table_or_attr
-      if (attr = db_attrs.find{|name, args, hash| name == arg.v})
-        attr.last[:val] || ""
-      else
-        tbl(arg.v)
-      end
-    when :source
-      filter arg.v
-    else
-      raise ArgumentError, "#{arg.inspect} must be :table_or_attr or :source"
-    end
   end
 
   # enum定義がされているときのみ
@@ -171,24 +206,24 @@ class Sandbox
     # * 「enum_wrapで囲まれた要素の前後にstrを挿入」ができない
     block.call
   end
-
-  def before
-    # TODO: あとで実装
-  end
-
-  def after
-    # TODO: あとで実装
-  end
 end
 
 class DbAttrBlock
-  # [DbAttr]
   attr_accessor :elems
 
   def initialize(labels, &block)
     @labels = labels
+    (c = DbAttrBlockForRunningDSL.new(labels)).instance_eval(&block)
+    @elems = c.elems
+  end
+end
+
+class DbAttrBlockForRunningDSL
+  attr_reader :elems
+
+  def initialize(labels)
+    @labels = labels
     @elems = []
-    self.instance_eval(&block)
   end
 
   def method_missing(name, *args)
@@ -257,4 +292,6 @@ raise "Missing ltpl argument" if ARGV.length != 1
 ltpl_name = "#{Dir.pwd}/#{ARGV.shift}"
 raise "Template file #{ltpl_name} is not exist." unless File.exist?(ltpl_name)
 
-puts LayeredTemplate.load(ltpl_name).output(BASE_DIR)
+result = LayeredTemplate.load(ltpl_name).output(BASE_DIR)
+puts result
+open("#{ENV['HOME']}/layered_template_result.html", "w"){|f| f.write result }
