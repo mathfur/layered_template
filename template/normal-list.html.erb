@@ -1,0 +1,27 @@
+      template 'normal-list' do
+        row '項目1'
+        row '項目2'
+        row '項目3'
+      end
+<ul>
+    <%- t_attrs.each do |name, items, opts| -%>
+      <%- case name -%>
+      <%- when :row -%>
+        <tr>
+        <%- items.each do |item| -%>
+          <th><%%= <%= opts[:header] || "t('#{item.v}')" %> %></th>
+        <%- end -%>
+        </tr>
+        <%%- objs.each do |obj| -%>
+          <tr>
+          <%- items.each do |item| -%>
+            <td><%= render(item) %></td>
+          <%- end -%>
+          </tr>
+        <%%- end -%>
+
+      <%- else -%>
+
+      <%- end -%>
+    <%- end -%>
+</ul>

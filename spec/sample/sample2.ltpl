@@ -1,0 +1,17 @@
+table :whole do
+  template :layout do
+    title 'タイトル'
+    body :large_table
+  end
+
+  table :large_table do
+    template 'normal-table' do
+      columns :name, :price
+    end
+  
+    attrs %w{val header} do
+      name "ここにitem.nameを表示", "<<name>>"
+      price "ここにitem.priceを表示", "<<header>>"
+    end
+  end
+end
