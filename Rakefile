@@ -21,6 +21,7 @@ Jeweler::Tasks.new do |gem|
   gem.description = %Q{During creation.}
   gem.email = "mathfuru@gmail.com"
   gem.authors = ["mathfuru"]
+  gem.executables = ["layered_template"]
   # dependencies defined in Gemfile
 end
 Jeweler::RubygemsDotOrgTasks.new

@@ -304,27 +304,3 @@ EOS
   end
 end
 
-parser = GetoptLong.new
-
-parser.set_options(
-  ['--template-path', '-t', GetoptLong::OPTIONAL_ARGUMENT],
-  ['--verbose', GetoptLong::NO_ARGUMENT]
-)
-
-parser.each_option do |name, arg|
-  case name
-  when '--template-path', '-t'
-    Helper.prepend_template_search_path(arg.split(/,/))
-  end
-end
-
-ARGV = ["spec/sample/sample2.ltpl"]
-
-raise "Missing ltpl argument" if ARGV.length != 1
-
-ltpl_name = "#{Dir.pwd}/#{ARGV.shift}"
-raise "Template file #{ltpl_name} is not exist." unless File.exist?(ltpl_name)
-
-result = LayeredTemplate.load(ltpl_name).output(BASE_DIR)
-puts result
-open("#{ENV['HOME']}/layered_template_result.html", "w"){|f| f.write result }
