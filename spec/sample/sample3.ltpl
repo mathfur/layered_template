@@ -6,21 +6,13 @@ table :whole do
 
   table 'contains' do
     template :'columns_and_rows' do
-      row :header
-      column :right_table, :left_table
-    end
-
-    table :header do
-      template 'horizontal-list' do
-        item "項目1"
-        item "項目2"
-        item "項目3"
-      end
+      vertical :right_table
+      vertical :left_table
     end
 
     table :right_table do
       template 'normal-list' do
-        row '項目1'
+        row '<a href="">項目1</a>'
         row '項目2'
         row '項目3'
       end

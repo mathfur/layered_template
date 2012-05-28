@@ -6,7 +6,8 @@ table :whole do
 
   table :large_table do
     template 'normal-table' do
-      columns :name, :price
+      cell :name
+      cell :price
     end
   
     attrs %w{val header} do

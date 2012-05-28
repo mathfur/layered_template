@@ -16,7 +16,7 @@ BASE_DIR = File.dirname(__FILE__) + "/.."
 
 class LayeredTemplate
   def initialize(src=nil, &block)
-    c = LayeredTemplateForRunningDSL.new
+    c = LayeredTemplateForRunningDSL.new(self)
     block_given? ?  c.instance_eval(&block) : c.instance_eval(src)
     @tables = c.tables
   end
@@ -27,6 +27,10 @@ class LayeredTemplate
 
   def output(dir=nil)
     @tables.map{|dc| dc.output(dir)}.join
+  end
+
+  def find_table(name)
+    @tables.find{|t| t.name.to_sym == name.to_sym} or @parent.find_table(name)
   end
 
 #  def inspect
@@ -41,47 +45,30 @@ class LayeredTemplate
 end
 
 class LayeredTemplateForRunningDSL
-  include TableDefinable
   attr_reader :tables
 
-  def initialize
+  def initialize(parent)
+    @parent = parent
     @tables = []
+  end
+
+  def table(name, &block)
+    @tables ||= []
+    @tables << Table.new(@parent, name, &block)
   end
 end
 
 class Table
-  include TableDefinable
-
   attr_reader :name, :d_attr_block, :d_attrs
 
   def initialize(parent, name, &block)
-    @name = name
-    @templates = []
-    @tpl_opt = {}
     @parent = parent
-    @d_attrs = []
-    self.instance_eval(&block)
-  end
-
-  def location(fname, location_id=nil)
-    @tpl_opt[:fname] = fname
-    @tpl_opt[:loc_id] = location_id
-  end
-
-  def enum(enum_in, enum_out)
-    @tpl_opt[:enum_in] = enum_in
-    @tpl_opt[:enum_out] = enum_out
-  end
-
-  def template(template_name, &block)
-    @templates << Template.new(self, template_name, @tpl_opt, &block)
-    @tpl_opt = {}
-  end
-  alias_method :deploy, :template
-
-  def attrs(labels, &block)
-    @d_attr_block = DbAttrBlock.new(labels, &block)
-    @d_attrs = @d_attr_block.elems
+    @name = name
+    (c = TableForRunningDSL.new(self)).instance_eval(&block)
+    @templates = c.templates
+    @tpl_opt = c.tpl_opt
+    @d_attrs = c.d_attrs
+    @tables = c.tables
   end
 
   def d_item(name)
@@ -91,6 +78,10 @@ class Table
 
   def output(dir=nil)
     @templates.map{|t| t.output(dir)}.join
+  end
+
+  def find_table(name)
+    @tables.find{|t| t.name.to_sym == name.to_sym} or @parent.find_table(name)
   end
 
 #  def inspect
@@ -107,14 +98,54 @@ class Table
 #  end
 end
 
+class TableForRunningDSL
+  attr_reader :templates, :tpl_opt, :d_attrs, :tables
+
+  def initialize(parent)
+    raise ArgumentError unless parent.kind_of?(Table)
+    @parent = parent
+    @templates = []
+    @tpl_opt = {}
+    @d_attrs = []
+  end
+
+  def template(template_name, &block)
+    @templates << Template.new(@parent, template_name, @tpl_opt, &block)
+    @tpl_opt = {}
+  end
+  alias_method :deploy, :template
+
+  def location(fname, location_id=nil)
+    @tpl_opt[:fname] = fname
+    @tpl_opt[:loc_id] = location_id
+  end
+
+  def enum(enum_in, enum_out)
+    @tpl_opt[:enum_in] = enum_in
+    @tpl_opt[:enum_out] = enum_out
+  end
+
+  def attrs(labels, &block)
+    @d_attr_block = DbAttrBlock.new(labels, &block)
+    @d_attrs = @d_attr_block.elems
+  end
+
+  def table(name, &block)
+    @tables ||= []
+    @tables << Table.new(@parent, name, &block)
+  end
+
+end
+
 class Template
   attr_reader :table, :t_attrs
 
   def initialize(table, template_name, opt={}, &block)
+    raise ArgumentError unless table.kind_of?(Table)
     @table = table
     @elems = []
     @opt = {}
-    @template_fname = Helper.find_template(template_name) or raise "The template file does not found."
+    @template_fname = Helper.find_template(template_name) or raise "The template file '#{template_name}' does not found."
     (t = TemplateForRunningDSL.new).instance_eval(&block)
     @t_attrs = t.elems
   end
@@ -173,20 +204,22 @@ class Sandbox
   end
 
   # itemの型に応じてテキストに変換する
-  def render(item, opts={})
-    case item.type
-    when :table_or_attr
-      attr_, opts = @template.table.d_item(item.v)
-      if attr_
-        opts[:val] || ""
+  def render(items, opts={})
+    [items].flatten.map do |item|
+      case item.type
+      when :table_or_attr
+        attr_, opts = @template.table.d_item(item.v)
+        if attr_
+          opts[:val] || ""
+        else
+          tbl(item.v)
+        end
+      when :source
+        filter item.v
       else
-        tbl(item.v)
+        raise ArgumentError, "#{item.inspect} must be :table_or_attr or :source"
       end
-    when :source
-      filter item.v
-    else
-      raise ArgumentError, "#{item.inspect} must be :table_or_attr or :source"
-    end
+    end.join("\n")
   end
 
   # nameという名前のテーブルを描画する

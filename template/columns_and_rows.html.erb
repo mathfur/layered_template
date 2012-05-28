@@ -1,1 +1,37 @@
+<%-
+  result_, stock_ = t_attrs.inject([[],[]]) do |(result, stock), (name, items, opts)|
+    case name
+    when :horizontal
+      result << stock
+      stock = []
+      result << [[:horizontal, items, opts]]
+    when :vertical
+      stock << [:vertical, items, opts]
+    else
+      raise ArgumentError, "name: #{name}"
+    end
 
+    prev_name = name
+    [result, stock]
+  end
+  result_ << stock_
+  # result :: [[(Label, [Item], Hash)]]
+  #   group :: [(Label, [Item], Hash)]
+  # stock :: [(Label, [Item], Hash)]
+-%>
+
+<%- result_.each do |group| -%>
+  <div>
+  <%- group.each do |name, items, opts| -%>
+    <div class='left-column'>
+    <%- case name -%>
+    <%- when :vertical -%>
+      <%= render(items) %>
+    <%- when :horizontal -%>
+      <%= render(items) %>
+    <%- else -%>
+    <%- end -%>
+    </div>
+  <%- end -%>
+  </div>
+<%- end -%>
