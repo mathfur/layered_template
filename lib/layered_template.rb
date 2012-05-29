@@ -2,9 +2,8 @@
 
 $:.unshift File.dirname(__FILE__)
 
-require "./lib/layered_template/config"
-require "./lib/layered_template/helper"
-require "./lib/layered_template/table_definable"
+require File.dirname(__FILE__) + "/layered_template/config"
+require File.dirname(__FILE__) + "/layered_template/helper"
 
 require 'rubygems'
 require "active_support"

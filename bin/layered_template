@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require "../lib/layered_template"
+require File.dirname(__FILE__) + "/../lib/layered_template"
 require "getoptlong"
 
 parser = GetoptLong.new
@@ -16,8 +16,6 @@ parser.each_option do |name, arg|
     Helper.prepend_template_search_path(arg.split(/,/))
   end
 end
-
-ARGV = ["spec/sample/sample3.ltpl"]
 
 raise "Missing ltpl argument" if ARGV.length != 1
 

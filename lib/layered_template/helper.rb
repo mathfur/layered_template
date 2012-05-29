@@ -1,4 +1,4 @@
-require "./lib/layered_template/config"
+require File.dirname(__FILE__) + "/config"
 
 module Helper
   @@template_search_paths = ENV['TEMPLATE_LOAD_PATH'] || []
