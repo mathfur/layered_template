@@ -1,11 +1,11 @@
 <table>
-<% <<EOS
+<%- <<EOS
 usable method:
  * t_attrs
  * render
  * names defined in template block
 EOS
-%>
+-%>
     <%- t_attrs.each do |name, items, opts| -%>
       <%- case name -%>
       <%- when :columns -%>
@@ -14,19 +14,16 @@ EOS
           <th><%%= <%= opts[:header] || "t('#{item.v}')" %> %></th>
         <%- end -%>
         </tr>
-        <%%- objs.each do |obj| -%>
+        <%%- <%= opts[:enum] ? opts[:enum].first : '@objs' %>.each do |<%= opts[:enum] ? opts[:enum].last : 'obj' %>| -%>
           <tr>
           <%- items.each do |item| -%>
             <td><%= render(item) %></td>
           <%- end -%>
           </tr>
         <%%- end -%>
-
       <%- when :paginate -%>
         <%= "pagenate_elem" %>
-
       <%- else -%>
-
       <%- end -%>
     <%- end -%>
 </table>
