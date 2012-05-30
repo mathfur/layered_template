@@ -216,7 +216,7 @@ class Sandbox
       when :table_or_attr
         attr_, opts = @template.table.d_item(item.v)
         if attr_
-          opts[:val] || ""
+          filter(opts[:val] || "")
         else
           tbl(item.v)
         end
@@ -235,7 +235,12 @@ class Sandbox
 
   # 頭文字r>などによって加工する
   def filter(str)
-    str
+    case str
+    when /\Ar>\s*(.*?)\Z/
+      $1
+    else
+      str
+    end
   end
 
   # enum定義がされているときのみ
