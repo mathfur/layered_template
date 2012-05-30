@@ -10,6 +10,7 @@ require "active_support"
 require 'active_support/core_ext/array'
 require 'erb'
 require "getoptlong"
+require "fileutils"
 
 BASE_DIR = File.dirname(__FILE__) + "/.."
 
@@ -24,8 +25,8 @@ class LayeredTemplate
     self.new(File.read(tpl_fname))
   end
 
-  def output(dir=nil)
-    @tables.map{|dc| dc.output(dir)}.join
+  def output
+    @tables.map{|dc| dc.output}.join
   end
 
   def find_table(name)
@@ -75,8 +76,8 @@ class Table
     [item[1], item[2]]
   end
 
-  def output(dir=nil)
-    @templates.map{|t| t.output(dir)}.join
+  def output
+    @templates.map{|t| t.output}.join
   end
 
   def find_table(name)
@@ -144,19 +145,19 @@ class Template
     raise ArgumentError unless table.kind_of?(Table)
     @table = table
     @elems = []
-    @opt = {}
+    @opt = opt
     @template_fname = Helper.find_template("#{template_name}.#{self.ext}") or raise "The template file '#{template_name}.#{self.ext}' does not found."
     (t = TemplateForRunningDSL.new).instance_eval(&block)
     @t_attrs = t.elems
   end
 
-  def output(dir=nil)
+  def output
     sandbox = Sandbox.new(self)
     erb = ERB.new(File.read(@template_fname), nil, '-')
     erb.filename = @template_fname
     erb_result = erb.result(sandbox.instance_eval("binding"))
-    if @opt[:fname] && dir
-      OutputManager.push("#{dir}/#{fname}", @opt[:loc_id], erb_result)
+    if @opt[:fname]
+      OutputManager.push(@opt[:fname], @opt[:loc_id], erb_result)
       nil
     else
       erb_result
@@ -295,21 +296,29 @@ class OutputManager
   @@contents = {}
 
   def self.push(fname, loc_id, content)
-    @contents[fname] ||= {}
-    @contents[fname][loc_id] ||= []
-    @contents[fname][loc_id] << content
+    @@contents[fname] ||= {}
+    @@contents[fname][loc_id] ||= []
+    @@contents[fname][loc_id] << content
   end
 
-  def self.write_to_file
-    @contents.each do |fname, hash|
-      raise "現状ではfnameが存在した場合は上書きしない. fname: #{fname}" if File.exist?(fname)
-      open(fname, 'w') do |f|
-        f.write hash.map do |loc_id, contents|
+  def self.write_to_file(dir)
+    @@contents.each do |fname, hash|
+      output_path = "#{dir}/#{fname}"
+      FileUtils.mkdir_p(File.dirname(output_path))
+      open(output_path, 'w') do |f|
+        output_str = hash.map do |loc_id, contents|
 <<EOS
 content_for :#{loc_id} do
-  #{contents.join("\n")}
+#{contents.map{|str| str.split("\n").map{|line| "  "+ line}.join("\n")}.join("\n")}
 EOS
         end.join("\n\n")
+        puts "\n=== output_to:#{output_path}\n#{output_str}"
+        if File.exist?(output_path)
+          STDERR.puts "現状では既存のファイルがある場合は上書きしない. fname: #{output_path}"
+          next
+        end
+        f.write output_str
+        puts ">> write to #{output_path}"
       end
     end
   end
