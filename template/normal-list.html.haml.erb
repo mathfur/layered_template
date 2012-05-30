@@ -1,0 +1,8 @@
+%ul
+  <%- t_attrs.each do |name, items, opts| -%>
+  <%- case name -%>
+  <%- when :row -%>
+  %li= <%= render(items) %>
+  <%- else -%>
+  <%- end -%>
+  <%- end -%>
