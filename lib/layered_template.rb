@@ -29,7 +29,7 @@ class LayeredTemplate
   end
 
   def find_table(name)
-    @tables.find{|t| t.name.to_sym == name.to_sym} or @parent.find_table(name)
+    @tables.find{|t| t.name.to_sym == name.to_sym} or raise "The table is not found. '#{@tables.map(&:name).inspect}' do not have '#{name}' "
   end
 
 #  def inspect
@@ -106,6 +106,7 @@ class TableForRunningDSL
     @templates = []
     @tpl_opt = {}
     @d_attrs = []
+    @tables = []
   end
 
   def template(template_name, &block)
@@ -144,7 +145,7 @@ class Template
     @table = table
     @elems = []
     @opt = {}
-    @template_fname = Helper.find_template(template_name) or raise "The template file '#{template_name}' does not found."
+    @template_fname = Helper.find_template("#{template_name}.#{self.ext}") or raise "The template file '#{template_name}.#{self.ext}' does not found."
     (t = TemplateForRunningDSL.new).instance_eval(&block)
     @t_attrs = t.elems
   end
