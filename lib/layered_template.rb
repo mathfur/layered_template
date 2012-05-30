@@ -151,7 +151,9 @@ class Template
 
   def output(dir=nil)
     sandbox = Sandbox.new(self)
-    erb_result = ERB.new(File.read(@template_fname), nil, '-').result(sandbox.instance_eval("binding"))
+    erb = ERB.new(File.read(@template_fname), nil, '-')
+    erb.filename = @template_fname
+    erb_result = erb.result(sandbox.instance_eval("binding"))
     if @opt[:fname] && dir
       OutputManager.push("#{dir}/#{fname}", @opt[:loc_id], erb_result)
       nil
