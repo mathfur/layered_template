@@ -167,6 +167,10 @@ class Template
     item = self.t_attrs.find{|name_, _, _| name_ == name.to_sym} || []
     [item[1], item[2]]
   end
+
+  def ext
+    "html.haml" # TODO: 後で修正
+  end
 end
 
 class TemplateForRunningDSL
