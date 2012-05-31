@@ -312,7 +312,7 @@ class OutputManager
       open(output_path, 'w') do |f|
         output_str = hash.map do |loc_id, contents|
 <<EOS
-content_for :#{loc_id} do
+- content_for :#{loc_id} do
 #{contents.map{|str| str.split("\n").map{|line| "  "+ line}.join("\n")}.join("\n")}
 EOS
         end.join("\n\n")
