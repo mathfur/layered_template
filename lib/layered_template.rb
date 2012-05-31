@@ -10,6 +10,7 @@ require "active_support"
 require 'active_support/core_ext/array'
 require 'erb'
 require "getoptlong"
+require "fileutils"
 
 BASE_DIR = File.dirname(__FILE__) + "/.."
 
@@ -24,12 +25,12 @@ class LayeredTemplate
     self.new(File.read(tpl_fname))
   end
 
-  def output(dir=nil)
-    @tables.map{|dc| dc.output(dir)}.join
+  def output
+    @tables.map{|dc| dc.output}.join
   end
 
   def find_table(name)
-    @tables.find{|t| t.name.to_sym == name.to_sym} or @parent.find_table(name)
+    @tables.find{|t| t.name.to_sym == name.to_sym} or raise "The table is not found. '#{@tables.map(&:name).inspect}' do not have '#{name}' "
   end
 
 #  def inspect
@@ -75,8 +76,8 @@ class Table
     [item[1], item[2]]
   end
 
-  def output(dir=nil)
-    @templates.map{|t| t.output(dir)}.join
+  def output
+    @templates.map{|t| t.output}.join
   end
 
   def find_table(name)
@@ -106,6 +107,7 @@ class TableForRunningDSL
     @templates = []
     @tpl_opt = {}
     @d_attrs = []
+    @tables = []
   end
 
   def template(template_name, &block)
@@ -143,17 +145,19 @@ class Template
     raise ArgumentError unless table.kind_of?(Table)
     @table = table
     @elems = []
-    @opt = {}
-    @template_fname = Helper.find_template(template_name) or raise "The template file '#{template_name}' does not found."
+    @opt = opt
+    @template_fname = Helper.find_template("#{template_name}.#{self.ext}") or raise "The template file '#{template_name}.#{self.ext}' does not found."
     (t = TemplateForRunningDSL.new).instance_eval(&block)
     @t_attrs = t.elems
   end
 
-  def output(dir=nil)
+  def output
     sandbox = Sandbox.new(self)
-    erb_result = ERB.new(File.read(@template_fname), nil, '-').result(sandbox.instance_eval("binding"))
-    if @opt[:fname] && dir
-      OutputManager.push("#{dir}/#{fname}", @opt[:loc_id], erb_result)
+    erb = ERB.new(File.read(@template_fname), nil, '-')
+    erb.filename = @template_fname
+    erb_result = erb.result(sandbox.instance_eval("binding"))
+    if @opt[:fname]
+      OutputManager.push(@opt[:fname], @opt[:loc_id], erb_result)
       nil
     else
       erb_result
@@ -163,6 +167,10 @@ class Template
   def t_item(name)
     item = self.t_attrs.find{|name_, _, _| name_ == name.to_sym} || []
     [item[1], item[2]]
+  end
+
+  def ext
+    "html.haml" # TODO: 後で修正
   end
 end
 
@@ -209,7 +217,7 @@ class Sandbox
       when :table_or_attr
         attr_, opts = @template.table.d_item(item.v)
         if attr_
-          opts[:val] || ""
+          filter(opts[:val] || "")
         else
           tbl(item.v)
         end
@@ -228,7 +236,16 @@ class Sandbox
 
   # 頭文字r>などによって加工する
   def filter(str)
-    str
+    case str
+    when /\Ar>\s*(.*?)\Z/
+      $1
+    else
+      str
+    end
+  end
+
+  def table_name
+    @template.table.name
   end
 
   # enum定義がされているときのみ
@@ -283,21 +300,29 @@ class OutputManager
   @@contents = {}
 
   def self.push(fname, loc_id, content)
-    @contents[fname] ||= {}
-    @contents[fname][loc_id] ||= []
-    @contents[fname][loc_id] << content
+    @@contents[fname] ||= {}
+    @@contents[fname][loc_id] ||= []
+    @@contents[fname][loc_id] << content
   end
 
-  def self.write_to_file
-    @contents.each do |fname, hash|
-      raise "現状ではfnameが存在した場合は上書きしない. fname: #{fname}" if File.exist?(fname)
-      open(fname, 'w') do |f|
-        f.write hash.map do |loc_id, contents|
+  def self.write_to_file(dir)
+    @@contents.each do |fname, hash|
+      output_path = "#{dir}/#{fname}"
+      FileUtils.mkdir_p(File.dirname(output_path))
+      open(output_path, 'w') do |f|
+        output_str = hash.map do |loc_id, contents|
 <<EOS
 content_for :#{loc_id} do
-  #{contents.join("\n")}
+#{contents.map{|str| str.split("\n").map{|line| "  "+ line}.join("\n")}.join("\n")}
 EOS
         end.join("\n\n")
+        puts "\n=== output_to:#{output_path}\n#{output_str}"
+        if File.exist?(output_path)
+          STDERR.puts "現状では既存のファイルがある場合は上書きしない. fname: #{output_path}"
+          next
+        end
+        f.write output_str
+        puts ">> write to #{output_path}"
       end
     end
   end

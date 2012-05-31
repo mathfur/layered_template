@@ -7,7 +7,7 @@ module Helper
   def find_template(template_name)
     @@template_search_paths.find do |path|
       Dir["#{path}/*"].find do |fname|
-        return fname if fname =~ %r|/#{template_name}(\.[^\.]*)*$|
+        return fname if fname =~ %r|/#{template_name}\.erb$|
       end
     end
   end
