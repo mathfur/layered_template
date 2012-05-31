@@ -1,0 +1,17 @@
+// <%= table_name %>
+%table.entry_show.table.table-striped.table-bordered.table-condense
+  <%- t_attrs.each do |name, items, opts| -%>
+  <%- case name -%>
+  <%- when :columns -%>
+  %tr
+    <%- items.each do |item| -%>
+    %th= <%= opts[:header] || "t('#{item.v}')" %>
+    <%- end -%>
+  - <%= opts[:enum] ? opts[:enum].first : '@objs' %>.each do |<%= opts[:enum] ? opts[:enum].last : 'obj' %>|
+    %tr
+    <%- items.each do |item| -%>
+      %td= <%= render(item) %>
+    <%- end -%>
+  <%- else -%>
+  <%- end -%>
+  <%- end -%>

@@ -1,0 +1,10 @@
+// <%= table_name %>
+%table.entry_show.table.table-striped.table-bordered.table-condense
+  %tr
+    <%- t_attrs.each do |name, items, opts| -%>
+    <%- case name -%>
+    <%- when :row -%>
+    %td= <%= render(items) %>
+    <%- else -%>
+    <%- end -%>
+    <%- end -%>
