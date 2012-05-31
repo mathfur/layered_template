@@ -244,6 +244,10 @@ class Sandbox
     end
   end
 
+  def table_name
+    @template.table.name
+  end
+
   # enum定義がされているときのみ
   # ループを回す
   def enum_wrap(&block)
