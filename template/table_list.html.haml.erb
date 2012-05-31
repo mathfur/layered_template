@@ -1,10 +1,13 @@
 // <%= table_name %>
 %table.entry_show.table.table-striped.table-bordered.table-condense
+  <%- t_attrs.each do |name, items, opts| -%>
   %tr
-    <%- t_attrs.each do |name, items, opts| -%>
     <%- case name -%>
     <%- when :row -%>
+    <%- if opts[:l] -%>
+    %th= <%= to_quote(opts[:l]) %>
+    <%- end -%>
     %td= <%= render(items) %>
     <%- else -%>
     <%- end -%>
-    <%- end -%>
+  <%- end -%>

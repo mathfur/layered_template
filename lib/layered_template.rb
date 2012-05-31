@@ -135,7 +135,6 @@ class TableForRunningDSL
     @tables ||= []
     @tables << Table.new(@parent, name, &block)
   end
-
 end
 
 class Template
@@ -246,6 +245,30 @@ class Sandbox
 
   def table_name
     @template.table.name
+  end
+
+  # example:
+  # 'abc' => :abc
+  # "ab'c" => :'ab\'c'
+  def to_symbol(str)
+    case str
+    when /'/
+      ":'" + str.to_s.gsub("'"){ "\\'" } + "'"
+    else
+      ':' + str.to_s
+    end
+  end
+
+  # example:
+  #  "abc" => '\'abc\''
+  #  "ab'c" => '\'abc\''
+  def to_quote(str)
+    case str
+    when /'/
+      "'" + str.to_s.gsub("'"){ "\\'" } + "'"
+    else
+      "'" + str.to_s + "'"
+    end
   end
 
   # enum定義がされているときのみ
