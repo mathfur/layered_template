@@ -4,8 +4,8 @@
   %tr
     <%- case name -%>
     <%- when :row -%>
-    <%- if opts[:l] -%>
-    %th= <%= to_quote(opts[:l]) %>
+    <%- if opts[:header] -%>
+    %th= <%= to_quote(opts[:header]) %>
     <%- end -%>
     %td= <%= render(items) %>
     <%- else -%>

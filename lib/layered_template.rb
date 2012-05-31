@@ -206,7 +206,15 @@ class Sandbox
   end
 
   def t_attrs
-    @template.t_attrs
+    @template.t_attrs.map do |name, items, opts|
+      attr_opt_sum = {}
+      items.select{|item| item.type == :table_or_attr}.each do |item|
+        _, opts_ = @template.table.d_item(item.v)
+        attr_opt_sum = attr_opt_sum.merge(opts_)
+      end
+      opts = attr_opt_sum.merge(opts)
+      [name, items, opts]
+    end
   end
 
   # itemの型に応じてテキストに変換する
