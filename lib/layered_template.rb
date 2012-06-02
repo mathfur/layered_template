@@ -14,52 +14,63 @@ require "fileutils"
 
 BASE_DIR = File.dirname(__FILE__) + "/.."
 
-class LayeredTemplate
-  def initialize(src=nil, &block)
-    c = LayeredTemplateForRunningDSL.new(self)
-    block_given? ?  c.instance_eval(&block) : c.instance_eval(src)
-    @tables = c.tables
-  end
+module LayeredTemplate
+  class Main
+    attr_reader :config
 
-  def self.load(tpl_fname)
-    self.new(File.read(tpl_fname))
-  end
+    def initialize(src=nil, &block)
+      c = LayeredTemplateForRunningDSL.new(self)
+      block_given? ?  c.instance_eval(&block) : c.instance_eval(src)
+      @tables = c.tables
+      @config = c.config_
+    end
 
-  def output
-    @tables.map{|dc| dc.output}.join
-  end
+    def self.load(tpl_fname)
+      self.new(File.read(tpl_fname))
+    end
 
-  def find_table(name)
-    @tables.find{|t| t.name.to_sym == name.to_sym} or raise "The table is not found. '#{@tables.map(&:name).inspect}' do not have '#{name}' "
-  end
+    def output
+      @tables.map{|dc| dc.output}.join
+    end
 
-#  def inspect
-#    <<EOS
-##<LayeredTemplate:0x1016b67f8
-#  @tables=[
-#    #{@tables.map(&:inspect).join("\n")}
-#  ]
-#>
-#EOS
-#  end
+    def find_table(name)
+      @tables.find{|t| t.name.to_sym == name.to_sym} or raise "The table is not found. '#{@tables.map(&:name).inspect}' do not have '#{name}' "
+    end
+
+  #  def inspect
+  #    <<EOS
+  ##<LayeredTemplate:0x1016b67f8
+  #  @tables=[
+  #    #{@tables.map(&:inspect).join("\n")}
+  #  ]
+  #>
+  #EOS
+  #  end
+  end
 end
 
 class LayeredTemplateForRunningDSL
-  attr_reader :tables
+  attr_reader :tables, :config_
 
   def initialize(parent)
     @parent = parent
     @tables = []
+    @config_ = {}
   end
 
   def table(name, &block)
     @tables ||= []
     @tables << Table.new(@parent, name, &block)
   end
+
+  def config(&block)
+    (c = ConfigForRunningDSL.new).instance_eval(&block)
+    @config_.merge(c.config)
+  end
 end
 
 class Table
-  attr_reader :name, :d_attr_block, :d_attrs
+  attr_reader :name, :d_attr_block, :d_attrs, :config
 
   def initialize(parent, name, &block)
     @parent = parent
@@ -69,6 +80,7 @@ class Table
     @tpl_opt = c.tpl_opt
     @d_attrs = c.d_attrs
     @tables = c.tables
+    @config = @parent.config
   end
 
   def d_item(name)
@@ -138,29 +150,33 @@ class TableForRunningDSL
 end
 
 class Template
-  attr_reader :table, :t_attrs
+  attr_reader :table, :t_attrs, :config
 
   def initialize(table, template_name, opt={}, &block)
     raise ArgumentError unless table.kind_of?(Table)
     @table = table
     @elems = []
     @opt = opt
-    @template_fname = Helper.find_template("#{template_name}.#{self.ext}") or raise "The template file '#{template_name}.#{self.ext}' does not found."
+    @template_fnames = LayeredTemplate::Helper.find_templates(template_name) or raise "The template file '#{template_name}' does not found."
     (t = TemplateForRunningDSL.new).instance_eval(&block)
     @t_attrs = t.elems
+    @config = @table.config
   end
 
   def output
+    return_val = ''
     sandbox = Sandbox.new(self)
-    erb = ERB.new(File.read(@template_fname), nil, '-')
-    erb.filename = @template_fname
-    erb_result = erb.result(sandbox.instance_eval("binding"))
-    if @opt[:fname]
-      OutputManager.push(@opt[:fname], @opt[:loc_id], erb_result)
-      nil
-    else
-      erb_result
+    @template_fnames.each do |template_fname|
+      erb = ERB.new(File.read(template_fname), nil, '-')
+      erb.filename = template_fname
+      erb_result = erb.result(sandbox.instance_eval("binding"))
+      if sandbox.fname
+        OutputManager.push(@opt[:fname] || sandbox.fname, @opt[:loc_id] || sandbox.loc_id, erb_result)
+      else
+        return_val += erb_result
+      end
     end
+    return_val
   end
 
   def t_item(name)
@@ -187,6 +203,8 @@ class TemplateForRunningDSL
 end
 
 class Sandbox
+  attr_reader :fname, :loc_id
+
   def initialize(template, opt={})
     @template = template
     @enum = (opt[:enum_in] && opt[:enum_out])
@@ -211,6 +229,21 @@ class Sandbox
       items.select{|item| item.type == :table_or_attr}.each do |item|
         _, opts_ = @template.table.d_item(item.v)
         attr_opt_sum = attr_opt_sum.merge(opts_)
+        item.instance_eval do
+          opts_.select{|k, v| k.to_s.include?('-') }.each do |k, v|
+            define_method(k.to_s) do
+              opts_[k.to_s.to_sym]
+            end
+          end
+          define_method(:[]) do |k|
+            opts_[k.to_s.to_sym]
+          end
+        end
+        eval(<<EOS)
+def item.[](k)
+  opts_[k.to_sym]
+end
+EOS
       end
       opts = attr_opt_sum.merge(opts)
       [name, items, opts]
@@ -279,6 +312,15 @@ class Sandbox
     end
   end
 
+  def output_to(fname, loc_id=nil)
+    @fname = fname
+    @loc_id = loc_id || :main
+  end
+
+  def config(name)
+    @template.config[name]
+  end
+
   # enum定義がされているときのみ
   # ループを回す
   def enum_wrap(&block)
@@ -308,7 +350,7 @@ class DbAttrBlockForRunningDSL
 
   def method_missing(name, *args)
     opts = args.extract_options!
-    @elems << [name, args, Hash[*(@labels.map(&:to_sym).zip(args)).flatten]]
+    @elems << [name, args, Hash[*(@labels.map(&:to_sym).zip(args)).flatten].merge(opts)]
   end
 end
 

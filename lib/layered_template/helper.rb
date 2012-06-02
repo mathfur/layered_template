@@ -1,19 +1,16 @@
 require File.dirname(__FILE__) + "/config"
 
-module Helper
-  @@template_search_paths = ENV['TEMPLATE_LOAD_PATH'] || []
-  @@template_search_paths << Config.tpl_dir
+module LayeredTemplate
+  module Helper
+    @@template_search_path = ENV['TEMPLATE_LOAD_PATH'] || Config.tpl_dir
 
-  def find_template(template_name)
-    @@template_search_paths.find do |path|
-      Dir["#{path}/*"].find do |fname|
-        return fname if fname =~ %r|/#{template_name}\.erb$|
-      end
+    def find_templates(template_name)
+      Dir["#{@@template_search_path}/#{template_name}/*"].select{|fname| fname =~ %r|\.erb$| }
     end
-  end
-  module_function :find_template
+    module_function :find_templates
 
-  def prepend_template_search_path(paths)
-    @@template_search_paths += [paths].flatten
+    def template_search_path(path)
+      @@template_search_path = path
+    end
   end
 end

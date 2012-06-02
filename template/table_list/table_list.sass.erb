@@ -1,0 +1,13 @@
+<% output_to "#{config.stylesheet_base_dir}/#{model_name}" %>
+table.<%= table_name %> tr {
+  <%- t_attrs.each do |name, items, opts| -%>
+  <%- items.each do |item| -%>
+  th.<%= item.class %> {
+    width: <%= item.label_width %>
+  }
+  td.<%= item.class %> {
+    width: <%= item.width %>
+  }
+  <%- end -%>
+  <%- end -%>
+}
