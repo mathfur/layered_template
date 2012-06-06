@@ -1,0 +1,11 @@
+<% if label %>
+%h2(class="h1") <%= label %>
+<% end %>
+%ul(data-role="listview")
+  - <%= enum_in %>.each do |<%= enum_out %>|
+    %li
+      %a(href="#{<%= render(:link_to)) %>}")
+      %h3<%= render(:title) %>
+      <% t_attrs(:description) do |item, opts| %>
+      %p<%= render(item) %>
+      <% end %>

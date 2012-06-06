@@ -1,0 +1,8 @@
+- <%= enum_in %>.each do |<%= enum_out %>|
+  %div(data-role="page" id="<%= id %>" data-theme="a")
+    %div(data-role="header")
+      <%= i2(render(:header)) %>
+    %div(data-role="content")
+      <%= i2(render(:content)) %>
+    %div(data-role="footer")
+      <%= i2(render(:footer)) %>

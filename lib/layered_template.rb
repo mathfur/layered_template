@@ -321,6 +321,41 @@ EOS
     @template.config[name]
   end
 
+  def enum_in
+    @enum_in
+  end
+
+  def enum_out
+    @enum_out
+  end
+
+  # === helpers =================
+  def i2(str); i_n(str, 2); end
+  def i4(str); i_n(str, 4); end
+  def i6(str); i_n(str, 6); end
+  def i8(str); i_n(str, 8); end
+
+  def i_n(str, n)
+    str.to_s.split(/\n/).map{|line| " "*n + line }.join("\n").lstrip
+  end
+
+  def h2(str); haml_element(str, 2); end
+  def h4(str); haml_element(str, 4); end
+  def h6(str); haml_element(str, 6); end
+  def h8(str); haml_element(str, 8); end
+
+  # If %div have 4 indent,  then use like
+  # %div<%= haml_element(body, 4) %>
+  def haml_element(str, indent_size)
+    str = filter(str)
+    lines = str.split(/\n/)
+    if lines.size <= 1
+      str
+    else
+      "\n" + lines.map{|line| " "*(indent_size+2) + line.to_s}.join("\n")
+    end
+  end
+
   # enum定義がされているときのみ
   # ループを回す
   def enum_wrap(&block)
