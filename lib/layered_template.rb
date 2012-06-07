@@ -34,7 +34,7 @@ module LayeredTemplate
     end
 
     def find_table(name)
-      @tables.find{|t| t.name.to_sym == name.to_sym} or raise "The table is not found. '#{@tables.map(&:name).inspect}' do not have '#{name}' "
+      @tables.find{|t| t.name.to_sym == name.to_sym} or (STDERR.puts "The table is not found. '#{@tables.map(&:name).inspect}' do not have '#{name}' "; nil)
     end
 
   #  def inspect
@@ -157,7 +157,8 @@ class Template
     @table = table
     @elems = []
     @opt = opt
-    @template_fnames = LayeredTemplate::Helper.find_templates(template_name) or raise "The template file '#{template_name}' does not found."
+    @template_fnames = LayeredTemplate::Helper.find_templates(template_name)
+    raise "The template file '#{template_name}' does not found." if @template_fnames.blank?
     (t = TemplateForRunningDSL.new).instance_eval(&block)
     @t_attrs = t.elems
     @config = @table.config
@@ -170,7 +171,7 @@ class Template
       erb = ERB.new(File.read(template_fname), nil, '-')
       erb.filename = template_fname
       erb_result = erb.result(sandbox.instance_eval("binding"))
-      if sandbox.fname
+      if @opt[:fname] || sandbox.fname
         OutputManager.push(@opt[:fname] || sandbox.fname, @opt[:loc_id] || sandbox.loc_id, erb_result)
       else
         return_val += erb_result
@@ -207,37 +208,41 @@ class Sandbox
 
   def initialize(template, opt={})
     @template = template
-    @enum = (opt[:enum_in] && opt[:enum_out])
-    @enum_in = opt[:enum_in] || "objs"
-    @enum_out = opt[:enum_out] || "obj"
 
-    self.class.class_eval do
-      # Names defined in template block can be called in erb.
-      template.t_attrs.each do |name, args, opts|
-        unless respond_to?(name)
-          define_method name do
-            template.t_item(name).first.map{|item| render(item)}.join("\n")
-          end
-        end
-      end
-    end
+    #self.class.class_eval do
+    #  # Names defined in template block can be called in erb.
+    #  template.t_attrs.each do |name, args, opts|
+    #    unless respond_to?(name)
+    #      define_method name do
+    #        template.t_item(name).first.map{|item| render(item)}.join("\n")
+    #      end
+    #    end
+    #  end
+    #end
   end
 
-  def t_attrs
-    @template.t_attrs.map do |name, items, opts|
+  private
+  def t_attrs(name_ = nil)
+    result = @template.t_attrs.select do |name, items, opts|
+      !name_ || name_.to_sym == name.to_sym
+    end.map do |name, items, opts|
       attr_opt_sum = {}
       items.select{|item| item.type == :table_or_attr}.each do |item|
         _, opts_ = @template.table.d_item(item.v)
-        attr_opt_sum = attr_opt_sum.merge(opts_)
+        attr_opt_sum = attr_opt_sum.merge(opts_ || {})
         item.instance_eval do
-          opts_.select{|k, v| k.to_s.include?('-') }.each do |k, v|
-            define_method(k.to_s) do
-              opts_[k.to_s.to_sym]
-            end
+          (opts_ || {}).reject{|k, v| k.to_s.include?('-') }.each do |k, v|
+            eval(<<EOS)
+def #{k.to_s}
+  #{opts_[k.to_s.to_sym].inspect}
+end
+EOS
           end
-          define_method(:[]) do |k|
-            opts_[k.to_s.to_sym]
-          end
+          eval(<<EOS)
+def [](k)
+  opts_[k.to_s.to_sym].inspect
+end
+EOS
         end
         eval(<<EOS)
 def item.[](k)
@@ -248,30 +253,55 @@ EOS
       opts = attr_opt_sum.merge(opts)
       [name, items, opts]
     end
+
+    if name_
+      result.map{|_, items, opts| [items, opts]}
+    else
+      result
+    end
   end
+
+  def r(item); h(render(item)); end
+  def r2(item); h2(render(item)); end
+  def r4(item); h4(render(item)); end
+  def r6(item); h6(render(item)); end
+  def r8(item); h8(render(item)); end
 
   # itemの型に応じてテキストに変換する
   def render(items, opts={})
-    [items].flatten.map do |item|
+    result = [items].flatten.map do |item|
+      item = Value.new(item) unless item.kind_of?(Value)
       case item.type
       when :table_or_attr
         attr_, opts = @template.table.d_item(item.v)
         if attr_
-          filter(opts[:val] || "")
+          # item in d_attrs
+          opts[:val] || ""
+        elsif (as = t_attrs(item.v)).present?
+          # bodyとかt_attrsで定義されている場合
+          as.map{|items_, _| render(items_)}.join("\n")
         else
+          # item in t_attrs
           tbl(item.v)
         end
       when :source
-        filter item.v
+        item.v
       else
         raise ArgumentError, "#{item.inspect} must be :table_or_attr or :source"
       end
     end.join("\n")
+
+    result.present? && result
+  end
+
+  def r!(items, opts={})
+    render(items, opts) or raise "Fail to render #{items.inspect}"
   end
 
   # nameという名前のテーブルを描画する
+  # If there is not the table, then return nil.
   def tbl(name)
-    @template.table.find_table(name).output
+    @template.table.find_table(name).try(:output)
   end
 
   # 頭文字r>などによって加工する
@@ -321,12 +351,21 @@ EOS
     @template.config[name]
   end
 
+  def enum
+    @template.t_item(:enum).try(:first)
+  end
+
   def enum_in
-    @enum_in
+    enum.try(:first)
   end
 
   def enum_out
-    @enum_out
+    enum.try(:last)
+  end
+
+  # name -> Hash
+  def opts(name)
+    @template.t_item(name).last
   end
 
   # === helpers =================
@@ -339,6 +378,7 @@ EOS
     str.to_s.split(/\n/).map{|line| " "*n + line }.join("\n").lstrip
   end
 
+  def h(str); haml_element(str, 2); end
   def h2(str); haml_element(str, 2); end
   def h4(str); haml_element(str, 4); end
   def h6(str); haml_element(str, 6); end
@@ -346,22 +386,22 @@ EOS
 
   # If %div have 4 indent,  then use like
   # %div<%= haml_element(body, 4) %>
-  def haml_element(str, indent_size)
-    str = filter(str)
+  def haml_element(str, indent_size=2)
+    raise ArgumentError, "#{str.inspect} is not String." unless str.kind_of?(String)
     lines = str.split(/\n/)
-    if lines.size <= 1
-      str
-    else
+    case str
+    when /\Ar>\s*(.*?)\Z/
+      "= #$1"
+    when /^[-%]/
       "\n" + lines.map{|line| " "*(indent_size+2) + line.to_s}.join("\n")
+    else
+      " #{str}"
     end
   end
 
-  # enum定義がされているときのみ
-  # ループを回す
-  def enum_wrap(&block)
-    # TODO: 以下はどうなる?
-    # * 「enum_wrapで囲まれた要素の前後にstrを挿入」ができない
-    block.call
+  def join_eq(hash)
+    raise ArgumentError, "#{hash.inspect} should be Hash" unless hash.kind_of?(Hash)
+    hash.map{|k, v| "#{k}='#{v}'"}.join(' ')
   end
 end
 
@@ -384,6 +424,7 @@ class DbAttrBlockForRunningDSL
   end
 
   def method_missing(name, *args)
+    raise ArgumentError, "@labels is wrong. @labels: #{@labels.inspect}" unless @labels.kind_of?(Enumerable) and @labels.all?{|label| label.respond_to?(:to_sym)}
     opts = args.extract_options!
     @elems << [name, args, Hash[*(@labels.map(&:to_sym).zip(args)).flatten].merge(opts)]
   end
@@ -418,16 +459,13 @@ class OutputManager
       output_path = "#{dir}/#{fname}"
       FileUtils.mkdir_p(File.dirname(output_path))
       open(output_path, 'w') do |f|
-        output_str = hash.map do |loc_id, contents|
-<<EOS
-- content_for :#{loc_id} do
-#{contents.map{|str| str.split("\n").map{|line| "  "+ line}.join("\n")}.join("\n")}
-EOS
+        output_str = hash.map do |_, contents|
+          contents.join("\n")
         end.join("\n\n")
         puts "\n=== output_to:#{output_path}\n#{output_str}"
         if File.exist?(output_path)
-          STDERR.puts "現状では既存のファイルがある場合は上書きしない. fname: #{output_path}"
-          next
+          #STDERR.puts "現状では既存のファイルがある場合は上書きしない. fname: #{output_path}"
+          #next
         end
         f.write output_str
         puts ">> write to #{output_path}"

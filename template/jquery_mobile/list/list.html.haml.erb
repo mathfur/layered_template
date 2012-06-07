@@ -1,0 +1,11 @@
+<%- if r(:label) -%>
+%h2(class="h1")<%= r(:label) %>
+<%- end -%>
+%ul(data-role="listview" <%= join_eq(opts(:options)) %>)
+  - <%= render(enum_in) %>.each do |<%= render(enum_out) %>|
+    %li
+      %a(href='<%= render(:link_to) %>')
+      %h3<%= r6(:title) %>
+      <%- t_attrs(:desc).each do |item, opts| -%>
+      %p<%= r6(item) %>
+      <%- end -%>

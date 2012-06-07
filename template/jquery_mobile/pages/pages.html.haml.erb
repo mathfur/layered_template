@@ -1,0 +1,9 @@
+<%- if enum -%>
+- <%= render(enum_in) %>.each do |<%= render(enum_out) %>|
+<%- else -%>
+- 1.times do
+<%- end -%>
+  %div(data-role="page" id="<%= r(:id) %>" data-theme="a")
+    %div(data-role="header")<%= r4(:header) %>
+    %div(data-role="content")<%= r4(:content) %>
+    %div(data-role="footer")<%= r4(:footer) %>
